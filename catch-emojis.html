@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Catch the Emojis — Random Game</title>
+<style>
+  :root{
+    --bg:#0f1724; --panel:#0b1220; --accent:#7c3aed; --muted:#94a3b8;
+    --player-h:64px; --player-w:120px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+    background: linear-gradient(180deg, #071023 0%, #081226 100%);
+    color:#e6eef8; display:flex; align-items:center; justify-content:center; height:100vh;
+  }
+  .game-wrap{
+    width:min(920px,96vw); background:linear-gradient(180deg,var(--panel), #071122);
+    border-radius:14px; box-shadow:0 10px 40px rgba(2,6,23,0.7); overflow:hidden;
+    display:grid; grid-template-columns: 1fr 320px; gap:0;
+  }
+
+  /* Game area */
+  .stage{
+    position:relative; min-height:520px; background:
+      radial-gradient(1200px 300px at 10% 10%, rgba(124,58,237,0.06), transparent 5%),
+      linear-gradient(180deg, rgba(255,255,255,0.02), transparent 40%);
+    padding:18px;
+    display:flex; flex-direction:column;
+  }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;
+  }
+  .stats{display:flex; gap:10px; align-items:center;}
+  .stat{
+    background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:10px; font-size:14px;
+    display:flex; gap:8px; align-items:center; color:var(--muted);
+  }
+  .stage-play{
+    flex:1; position:relative; border-radius:10px; overflow:hidden; background:
+      linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.03));
+    display:block;
+  }
+
+  /* player */
+  .player{
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    width:var(--player-w); height:var(--player-h); border-radius:12px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.05));
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    font-size:28px; user-select:none;
+    border:1px solid rgba(255,255,255,0.04);
+  }
+  .player .label{font-size:13px; color:var(--muted); margin-left:8px;}
+
+  /* falling item */
+  .item{
+    position:absolute; font-size:36px; pointer-events:none;
+    transform:translate(-50%,-50%);
+    text-shadow: 0 6px 12px rgba(2,6,23,0.6);
+  }
+
+  /* sidebar */
+  .sidebar{
+    padding:18px; border-left:1px solid rgba(255,255,255,0.02);
+    display:flex; flex-direction:column; gap:14px; background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent);
+  }
+  h1{font-size:18px;margin:0 0 6px 0}
+  .controls{display:flex;flex-direction:column;gap:8px}
+  button{
+    background:var(--accent); border:none; color:white; padding:10px 12px; border-radius:10px; cursor:pointer;
+    font-weight:600; box-shadow:0 6px 18px rgba(124,58,237,0.18);
+  }
+  button.ghost{
+    background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted); font-weight:600;
+  }
+  .help{font-size:13px;color:var(--muted)}
+  .footer{margin-top:auto;font-size:12px;color:var(--muted)}
+  .center{display:flex;align-items:center;gap:8px}
+
+  /* small screens */
+  @media (max-width:880px){
+    .game-wrap{grid-template-columns: 1fr; max-height:92vh;}
+    .sidebar{order:2;border-left:none;border-top:1px solid rgba(255,255,255,0.02)}
+  }
+</style>
+</head>
+<body>
+  <div class="game-wrap" role="application" aria-label="Catch the Emojis game">
+    <section class="stage" id="stage">
+      <div class="topbar">
+        <div class="stats" aria-hidden="false">
+          <div class="stat" id="score">⭐ Score: <strong style="color:white;margin-left:6px">0</strong></div>
+          <div class="stat" id="level">⚙️ Level: <strong style="color:white;margin-left:6px">1</strong></div>
+          <div class="stat" id="lives">❤️ Lives: <strong style="color:white;margin-left:6px">3</strong></div>
+        </div>
+        <div class="center">
+          <div class="help">Use ← / → keys, mouse, or touch to move. Catch good emojis, avoid bombs!</div>
+        </div>
+      </div>
+
+      <div class="stage-play" id="playArea" tabindex="0" aria-label="Game play area">
+        <div class="player" id="player" role="img" aria-label="Player catcher">
+          🧺 <span class="label">Catcher</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar" aria-label="Game controls">
+      <div>
+        <h1>Catch the Emojis</h1>
+        <div class="help">Catch falling emoji items to score points. Some are bad — avoid bombs!</div>
+      </div>
+
+      <div class="controls">
+        <button id="startBtn">Start Game</button>
+        <button id="pauseBtn" class="ghost" disabled>Pause</button>
+        <button id="restartBtn" class="ghost" disabled>Restart</button>
+      </div>
+
+      <div>
+        <h2 style="font-size:13px;margin:8px 0 6px 0">High Score</h2>
+        <div id="hi" style="font-weight:700;font-size:24px;color:#fff">0</div>
+      </div>
+
+      <div>
+        <h2 style="font-size:13px;margin:8px 0 6px 0">Items</h2>
+        <div class="help">Good: 🍎 🍕 🎁 🎟️ (points). Bad: 💣 (lose life). Special: ⭐ (extra points).</div>
+      </div>
+
+      <div class="footer">Tip: Increase difficulty with higher levels — the fall speed grows over time.</div>
+    </aside>
+  </div>
+
+<script>
+/*
+  Catch the Emojis
+  - Single-file desktop/mobile-friendly game
+  - Controls: arrow keys, mouse move, touch/pointermove
+  - Items fall from top, catch to score; bombs remove lives
+*/
+
+(() => {
+  // Config
+  const CONFIG = {
+    spawnInterval: 900,            // initial ms between spawns
+    spawnDecreasePerLevel: 60,     // how much spawnInterval reduces per level
+    minSpawnInterval: 300,
+    gravityBase: 55,               // px per second^2 base
+    speedIncreasePerLevel: 18,     // additional px/s per level
+    widthPadding: 30,              // padding from edges for spawns
+    playerSpeed: 12,               // px per animation frame when using keyboard
+    startLives: 3,
+    items: [
+      {emoji: "🍎", points: 10, type: "good"},
+      {emoji: "🍕", points: 12, type: "good"},
+      {emoji: "🎁", points: 18, type: "good"},
+      {emoji: "🎟️", points: 20, type: "good"},
+      {emoji: "⭐", points: 35, type: "special"},
+      {emoji: "💣", points: 0, type: "bomb"}
+    ]
+  };
+
+  // DOM
+  const playArea = document.getElementById('playArea');
+  const playerEl = document.getElementById('player');
+  const scoreEl = document.querySelector('#score strong');
+  const levelEl = document.querySelector('#level strong');
+  const livesEl = document.querySelector('#lives strong');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const hiEl = document.getElementById('hi');
+
+  // State
+  let state = {
+    running: false,
+    paused: false,
+    lastTime: 0,
+    spawnTimer: 0,
+    spawnInterval: CONFIG.spawnInterval,
+    gravity: CONFIG.gravityBase,
+    score: 0,
+    level: 1,
+    lives: CONFIG.startLives,
+    highScore: Number(localStorage.getItem('catch_emojis_hi') || 0),
+    items: [],          // active falling items
+    keys: {left:false, right:false},
+    playerX: 0,         // center x in px relative to playArea left
+  };
+
+  // Initialize UI
+  hiEl.textContent = state.highScore;
+
+  // Utility: clamp
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+  // Measurements
+  function measure(){
+    const rect = playArea.getBoundingClientRect();
+    return {w: rect.width, h: rect.height, left: rect.left, top: rect.top};
+  }
+
+  // Create new item
+  function spawnItem(){
+    const m = measure();
+    const choice = CONFIG.items[Math.floor(Math.random()*CONFIG.items.length)];
+    const x = Math.random() * (m.w - CONFIG.widthPadding*2) + CONFIG.widthPadding;
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.textContent = choice.emoji;
+    playArea.appendChild(el);
+    // random horizontal drift
+    const drift = (Math.random()-0.5) * 40;
+    const speedY = 60 + Math.random()*20 + state.level * CONFIG.speedIncreasePerLevel;
+    const item = {
+      el, x, y: -20, drift, speedY, angular: (Math.random()*80-40), rotation:0,
+      points: choice.points, type: choice.type, born: performance.now()
+    };
+    state.items.push(item);
+  }
+
+  // Remove item (cleanup)
+  function removeItem(item){
+    if(item.el && item.el.parentElement) item.el.parentElement.removeChild(item.el);
+    const idx = state.items.indexOf(item);
+    if(idx>=0) state.items.splice(idx,1);
+  }
+
+  // Reset game state
+  function resetGame(){
+    // clear items
+    state.items.slice().forEach(removeItem);
+    state.score = 0;
+    state.level = 1;
+    state.lives = CONFIG.startLives;
+    state.spawnInterval = CONFIG.spawnInterval;
+    state.spawnTimer = 0;
+    state.gravity = CONFIG.gravityBase;
+    updateUI();
+  }
+
+  // Update UI elements
+  function updateUI(){
+    scoreEl.textContent = state.score;
+    levelEl.textContent = state.level;
+    livesEl.textContent = state.lives;
+    hiEl.textContent = state.highScore;
+  }
+
+  // Game over
+  function gameOver(){
+    state.running = false;
+    state.paused = false;
+    pauseBtn.disabled = true;
+    restartBtn.disabled = false;
+    startBtn.disabled = false;
+    // Update high score
+    if(state.score > state.highScore){
+      state.highScore = state.score;
+      localStorage.setItem('catch_emojis_hi', String(state.highScore));
+      hiEl.textContent = state.highScore;
+    }
+    // show floating game over text
+    const nod = document.createElement('div');
+    nod.style.position='absolute';
+    nod.style.left='50%'; nod.style.top='44%'; nod.style.transform='translate(-50%,-50%)';
+    nod.style.padding='18px 22px'; nod.style.borderRadius='12px';
+    nod.style.background='linear-gradient(180deg, rgba(12,16,29,0.9), rgba(6,9,16,0.9))';
+    nod.style.border='1px solid rgba(255,255,255,0.03)';
+    nod.style.textAlign='center';
+    nod.style.boxShadow='0 12px 30px rgba(2,6,23,0.6)';
+    nod.innerHTML = `<div style="font-size:22px;font-weight:700">Game Over</div>
+                     <div style="margin-top:8px;color:var(--muted)">Score: ${state.score}</div>`;
+    playArea.appendChild(nod);
+    setTimeout(()=> {
+      if(nod && nod.parentElement) nod.parentElement.removeChild(nod);
+    }, 3000);
+  }
+
+  // Handle catch logic
+  function handleCatch(item){
+    if(item.type === 'bomb'){
+      // lose life
+      state.lives -= 1;
+      // shake player
+      playerEl.animate([{transform:'translateX(-50%) rotate(-4deg)'},{transform:'translateX(-50%) rotate(4deg)'},{transform:'translateX(-50%) rotate(0deg)'}], {duration:420,iterations:1});
+      if(state.lives <= 0){
+        updateUI();
+        removeItem(item);
+        gameOver();
+        return;
+      }
+    } else if(item.type === 'special'){
+      state.score += item.points;
+      // bonus effect
+      const fx = document.createElement('div');
+      fx.style.position='absolute'; fx.style.left=`${item.x}px`; fx.style.top=`${item.y}px`;
+      fx.style.transform='translate(-50%,-120%)'; fx.style.fontSize='20px'; fx.textContent = `+${item.points}!`;
+      playArea.appendChild(fx);
+      setTimeout(()=> fx.remove(), 800);
+    } else {
+      state.score += item.points;
+    }
+    removeItem(item);
+    // Level up for thresholds
+    const nextLevelThreshold = 100 + (state.level-1)*120;
+    if(state.score >= nextLevelThreshold){
+      state.level += 1;
+      state.spawnInterval = Math.max(CONFIG.minSpawnInterval, CONFIG.spawnInterval - (state.level-1)*CONFIG.spawnDecreasePerLevel);
+      // small level-up effect
+      const lvFx = document.createElement('div');
+      lvFx.style.position='absolute'; lvFx.style.left='50%'; lvFx.style.top='12%';
+      lvFx.style.transform='translate(-50%,-50%)'; lvFx.style.padding='8px 14px';
+      lvFx.style.borderRadius='10px'; lvFx.style.fontWeight=700; lvFx.style.background='rgba(124,58,237,0.14)';
+      lvFx.textContent = `Level ${state.level}`;
+      playArea.appendChild(lvFx);
+      setTimeout(()=>lvFx.remove(), 900);
+    }
+    updateUI();
+  }
+
+  // Collision detection: simple bounding box overlap
+  function checkCollision(item, playerRect){
+    const playRect = item.el.getBoundingClientRect();
+    // convert to playArea local coords
+    const areaRect = playArea.getBoundingClientRect();
+    const itemRectLocal = {
+      left: playRect.left - areaRect.left,
+      right: playRect.right - areaRect.left,
+      top: playRect.top - areaRect.top,
+      bottom: playRect.bottom - areaRect.top
+    };
+    return !(itemRectLocal.right < playerRect.left || itemRectLocal.left > playerRect.right ||
+             itemRectLocal.bottom < playerRect.top || itemRectLocal.top > playerRect.bottom);
+  }
+
+  // Update loop
+  function update(ts){
+    if(!state.running || state.paused) {
+      state.lastTime = ts;
+      requestAnimationFrame(update);
+      return;
+    }
+    const dt = (ts - (state.lastTime || ts)) / 1000; // seconds
+    state.lastTime = ts;
+
+    // spawn items
+    state.spawnTimer += (ts ? (dt*1000) : 0);
+    if(state.spawnTimer >= state.spawnInterval){
+      spawnItem();
+      state.spawnTimer = 0;
+    }
+
+    // update items
+    const m = measure();
+    const playerRect = playerEl.getBoundingClientRect();
+    // convert to local coords
+    const areaRect = playArea.getBoundingClientRect();
+    const playerLocal = {
+      left: playerRect.left - areaRect.left,
+      right: playerRect.right - areaRect.left,
+      top: playerRect.top - areaRect.top,
+      bottom: playerRect.bottom - areaRect.top
+    };
+
+    for(let i = state.items.length-1; i >= 0; i--){
+      const item = state.items[i];
+      // physics
+      item.speedY += (state.gravity * dt);
+      item.y += item.speedY * dt;
+      item.x += item.drift * dt;
+      item.rotation = (item.rotation + item.angular * dt) % 360;
+      // update DOM
+      item.el.style.left = item.x + 'px';
+      item.el.style.top = item.y + 'px';
+      item.el.style.transform = `translate(-50%,-50%) rotate(${item.rotation}deg)`;
+      // collision
+      if(checkCollision(item, playerLocal)){
+        handleCatch(item);
+        continue;
+      }
+      // off-screen (missed)
+      if(item.y > m.h + 80){
+        // if missed and it's good, lose points or life?
+        if(item.type === 'good'){
+          state.score = Math.max(0, state.score - Math.floor(item.points/2));
+        }
+        removeItem(item);
+        updateUI();
+      }
+    }
+
+    // Player movement (keyboard)
+    if(state.keys.left) state.playerX -= CONFIG.playerSpeed * (dt*60);
+    if(state.keys.right) state.playerX += CONFIG.playerSpeed * (dt*60);
+    // clamp
+    state.playerX = clamp(state.playerX, 40, m.w - 40);
+    // apply to DOM
+    playerEl.style.left = state.playerX + 'px';
+
+    // next frame
+    requestAnimationFrame(update);
+  }
+
+  // Input: keyboard
+  window.addEventListener('keydown', (e)=> {
+    if(e.key === 'ArrowLeft' || e.key === 'a') state.keys.left = true;
+    if(e.key === 'ArrowRight' || e.key === 'd') state.keys.right = true;
+    // space to pause/resume
+    if(e.key === ' '){
+      e.preventDefault();
+      if(!state.running) start();
+      else togglePause();
+    }
+  });
+  window.addEventListener('keyup', (e)=> {
+    if(e.key === 'ArrowLeft' || e.key === 'a') state.keys.left = false;
+    if(e.key === 'ArrowRight' || e.key === 'd') state.keys.right = false;
+  });
+
+  // Mouse move control
+  playArea.addEventListener('mousemove', (e)=> {
+    const r = playArea.getBoundingClientRect();
+    state.playerX = clamp(e.clientX - r.left, 40, r.width-40);
+  });
+
+  // Touch/pointer support
+  playArea.addEventListener('pointermove', (e)=> {
+    if(e.pointerType === 'touch' || e.pointerType === 'pen' || e.pointerType === 'mouse'){
+      const r = playArea.getBoundingClientRect();
+      state.playerX = clamp(e.clientX - r.left, 40, r.width-40);
+    }
+  });
+
+  // Start game
+  function start(){
+    resetGame();
+    // place player center
+    const m = measure();
+    state.playerX = Math.floor(m.w / 2);
+    state.running = true; state.paused = false;
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    restartBtn.disabled = true;
+    updateUI();
+    requestAnimationFrame(update);
+  }
+
+  // Pause toggle
+  function togglePause(){
+    if(!state.running) return;
+    state.paused = !state.paused;
+    pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+    pauseBtn.classList.toggle('ghost', !state.paused);
+    pauseBtn.classList.toggle('active', state.paused);
+  }
+
+  // Restart
+  function restart(){
+    // clean up
+    state.items.slice().forEach(removeItem);
+    state.running = false;
+    start();
+  }
+
+  // Buttons
+  startBtn.addEventListener('click', start);
+  pauseBtn.addEventListener('click', togglePause);
+  restartBtn.addEventListener('click', restart);
+
+  // make sure player initial position centers properly on load/resize
+  function layoutInit(){
+    const m = measure();
+    if(!state.playerX) state.playerX = Math.floor(m.w/2);
+    playerEl.style.left = state.playerX + 'px';
+  }
+  window.addEventListener('resize', layoutInit);
+  layoutInit();
+
+  // keep focus for keyboard controls
+  playArea.addEventListener('click', ()=> playArea.focus());
+
+  // expose a tiny dev helper to console for quick start
+  window._catchGame = {
+    start, resetGame, state
+  };
+
+})();
+</script>
+</body>
+</html>
